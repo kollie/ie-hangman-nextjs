@@ -2,6 +2,39 @@
 
 import { useState, useEffect } from "react";
 
+const translations = {
+  en: {
+    title: "Hangman Game",
+    attemptsLeft: "Attempts left",
+    newWord: "New Word",
+    restartGame: "Restart Game",
+    resetHistory: "Reset History",
+    history: "Game History",
+    win: "Win",
+    loss: "Loss",
+  },
+  es: {
+    title: "Juego del Ahorcado",
+    attemptsLeft: "Intentos restantes",
+    newWord: "Nueva Palabra",
+    restartGame: "Reiniciar Juego",
+    resetHistory: "Restablecer Historial",
+    history: "Historial del Juego",
+    win: "Victoria",
+    loss: "Derrota",
+  },
+  fr: {
+    title: "Jeu du Pendu",
+    attemptsLeft: "Essais restants",
+    newWord: "Nouveau Mot",
+    restartGame: "Redémarrer le Jeu",
+    resetHistory: "Réinitialiser l'Historique",
+    history: "Historique du Jeu",
+    win: "Victoire",
+    loss: "Défaite",
+  },
+};
+
 const languages = {
   en: "https://random-word-api.herokuapp.com/word",
   es: "https://random-word-api.herokuapp.com/word?lang=es",
@@ -24,12 +57,123 @@ function CardContent({ children }) {
   return <div className="text-center text-xl font-bold">{children}</div>;
 }
 
+function HangmanDrawing({ attempts }) {
+  return (
+    <svg
+      width="200"
+      height="250"
+      viewBox="0 0 200 250"
+      className="stroke-black stroke-2"
+      fill="none"
+    >
+      {/* Base Structure */}
+      <line
+        x1="10"
+        y1="240"
+        x2="100"
+        y2="240"
+        stroke="black"
+        strokeWidth="4"
+      />{" "}
+      {/* Ground */}
+      <line
+        x1="55"
+        y1="240"
+        x2="55"
+        y2="20"
+        stroke="black"
+        strokeWidth="4"
+      />{" "}
+      {/* Pole */}
+      <line
+        x1="55"
+        y1="20"
+        x2="150"
+        y2="20"
+        stroke="black"
+        strokeWidth="4"
+      />{" "}
+      {/* Top Bar */}
+      <line
+        x1="150"
+        y1="20"
+        x2="150"
+        y2="50"
+        stroke="black"
+        strokeWidth="4"
+      />{" "}
+      {/* Rope */}
+      {/* Hangman Figure */}
+      {attempts <= 5 && (
+        <circle cx="150" cy="70" r="20" stroke="black" strokeWidth="3" />
+      )}{" "}
+      {/* Head */}
+      {attempts <= 4 && (
+        <line
+          x1="150"
+          y1="90"
+          x2="150"
+          y2="150"
+          stroke="black"
+          strokeWidth="3"
+        />
+      )}{" "}
+      {/* Body */}
+      {attempts <= 3 && (
+        <line
+          x1="150"
+          y1="110"
+          x2="120"
+          y2="130"
+          stroke="black"
+          strokeWidth="3"
+        />
+      )}{" "}
+      {/* Left Arm */}
+      {attempts <= 2 && (
+        <line
+          x1="150"
+          y1="110"
+          x2="180"
+          y2="130"
+          stroke="black"
+          strokeWidth="3"
+        />
+      )}{" "}
+      {/* Right Arm */}
+      {attempts <= 1 && (
+        <line
+          x1="150"
+          y1="150"
+          x2="120"
+          y2="190"
+          stroke="black"
+          strokeWidth="3"
+        />
+      )}{" "}
+      {/* Left Leg */}
+      {attempts <= 0 && (
+        <line
+          x1="150"
+          y1="150"
+          x2="180"
+          y2="190"
+          stroke="black"
+          strokeWidth="3"
+        />
+      )}{" "}
+      {/* Right Leg */}
+    </svg>
+  );
+}
+
 export default function Hangman() {
   const [word, setWord] = useState("");
   const [guessedLetters, setGuessedLetters] = useState([]);
   const [language, setLanguage] = useState("en");
   const [attempts, setAttempts] = useState(6);
   const [history, setHistory] = useState([]);
+  const [gameOver, setGameOver] = useState(false);
 
   useEffect(() => {
     fetchWord();
@@ -42,13 +186,14 @@ export default function Hangman() {
       setWord(data[0].toLowerCase());
       setGuessedLetters([]);
       setAttempts(6);
+      setGameOver(false);
     } catch (error) {
       console.error("Error fetching word:", error);
     }
   }
 
   function handleGuess(letter) {
-    if (guessedLetters.includes(letter) || attempts === 0) return;
+    if (guessedLetters.includes(letter) || attempts === 0 || gameOver) return;
     setGuessedLetters([...guessedLetters, letter]);
     if (!word.includes(letter)) {
       setAttempts(attempts - 1);
@@ -68,10 +213,10 @@ export default function Hangman() {
       word.split("").every((letter) => guessedLetters.includes(letter))
     ) {
       setHistory([...history, { word, result: "Win" }]);
-      fetchWord();
+      setGameOver(true);
     } else if (attempts === 0) {
       setHistory([...history, { word, result: "Loss" }]);
-      fetchWord();
+      setGameOver(true);
     }
   }
 
@@ -80,25 +225,39 @@ export default function Hangman() {
   }, [guessedLetters, attempts]);
 
   return (
-    <div className="flex p-4 gap-8">
+    <div className="flex flex-col md:flex-row items-center md:items-start p-4 gap-8">
+      {/* Left: Hangman Drawing */}
+      <div className="w-full md:w-1/3 flex justify-center bg-white">
+        <HangmanDrawing attempts={attempts} />
+      </div>
+
+      {/* Middle: Game Controls */}
       <div className="flex-1 flex flex-col items-center gap-4">
-        <h1 className="text-2xl font-bold">Hangman Game</h1>
+        <h1 className="text-2xl font-bold text-center md:text-left">
+          {translations[language].title}
+        </h1>
         <Card>
           <CardContent>{renderWord()}</CardContent>
         </Card>
-        <p>Attempts left: {attempts}</p>
-        <div className="grid grid-cols-9 gap-2">
+        <p className="text-lg">
+          {translations[language].attemptsLeft}: {attempts}
+        </p>
+
+        {/* Letters Grid */}
+        <div className="grid grid-cols-9 md:grid-cols-6 lg:grid-cols-9 gap-2">
           {"abcdefghijklmnopqrstuvwxyz".split("").map((letter) => (
             <Button
               key={letter}
               onClick={() => handleGuess(letter)}
-              disabled={guessedLetters.includes(letter)}
+              disabled={guessedLetters.includes(letter) || gameOver}
               className="bg-gray-300 text-black hover:bg-gray-400"
             >
               {letter}
             </Button>
           ))}
         </div>
+
+        {/* Language Selection */}
         <div className="flex gap-2">
           {Object.keys(languages).map((lang) => (
             <Button
@@ -114,15 +273,54 @@ export default function Hangman() {
             </Button>
           ))}
         </div>
-        <Button
-          onClick={fetchWord}
+
+        {/* New Word Button */}
+        {/* <Button
+          onClick={() => {
+            fetchWord();
+            setHistory([]);
+          }}
           className="mt-4 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
         >
           New Word
-        </Button>
+        </Button> */}
+
+        {/* Restart & New Word Buttons */}
+        <div className="flex gap-4 mt-4">
+          <Button
+            onClick={() => {
+              setGuessedLetters([]);
+              setAttempts(6);
+              setGameOver(false);
+              fetchWord();
+            }}
+            className="border-2 border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+          >
+            {translations[language].restartGame}
+          </Button>
+
+          <Button
+            onClick={() => {
+              fetchWord();
+              setHistory([]);
+            }}
+            className="border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+          >
+            {translations[language].newWord}
+          </Button>
+        </div>
       </div>
-      <div className="w-1/5 border-l pl-4">
-        <h1 className="text-2xl font-bold">Game History</h1>
+
+      {/* Right: Game History */}
+      <div className="w-full md:w-1/5 border-t md:border-t-0 md:border-l pl-4 pt-4 md:pt-0">
+        <h2 className="text-xl font-bold">{translations[language].history}</h2>
+        <Button
+          onClick={() => setHistory([])}
+          className="mb-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+        >
+          {translations[language].resetHistory}
+        </Button>
+
         <ul>
           {history.map((game, index) => (
             <li
@@ -131,16 +329,10 @@ export default function Hangman() {
                 game.result === "Win" ? "text-green-600" : "text-red-600"
               }
             >
-              {game.word} - {game.result}
+              {game.word} - {translations[language][game.result.toLowerCase()]}
             </li>
           ))}
         </ul>
-        <Button
-          onClick={() => setHistory([])}
-          className="mb-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-        >
-          Reset History
-        </Button>
       </div>
     </div>
   );
