@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import Confetti from "react-confetti";
+import useSound from "use-sound";
 
 const translations = {
   en: {
@@ -12,6 +15,7 @@ const translations = {
     history: "Game History",
     win: "Win",
     loss: "Loss",
+    hint: "Hint",
   },
   es: {
     title: "Juego del Ahorcado",
@@ -22,6 +26,7 @@ const translations = {
     history: "Historial del Juego",
     win: "Victoria",
     loss: "Derrota",
+    hint: "Pista",
   },
   fr: {
     title: "Jeu du Pendu",
@@ -32,6 +37,7 @@ const translations = {
     history: "Historique du Jeu",
     win: "Victoire",
     loss: "Défaite",
+    hint: "Indice",
   },
 };
 
@@ -57,7 +63,7 @@ function CardContent({ children }) {
   return <div className="text-center text-xl font-bold">{children}</div>;
 }
 
-function HangmanDrawing({ attempts }) {
+function HangmanDrawing({ attempts, timeLeft }) {
   return (
     <svg
       width="200"
@@ -174,10 +180,47 @@ export default function Hangman() {
   const [attempts, setAttempts] = useState(6);
   const [history, setHistory] = useState([]);
   const [gameOver, setGameOver] = useState(false);
+  const [hintUsed, setHintUsed] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(60);
+  const timerRef = useRef(null);
+
+  const [playWin, { stop: stopWin }] = useSound("/sounds/win.wav", {
+    volume: 0.5,
+  });
+  const [playLoss, { stop: stopLoss }] = useSound("/sounds/loss.mp3", {
+    volume: 0.5,
+  });
+  const [playCorrect, { stop: stopCorrect }] = useSound("/sounds/correct.wav", {
+    volume: 0.5,
+  });
+  const [playIncorrect, { stop: stopIncorrect }] = useSound(
+    "/sounds/incorrect.wav",
+    { volume: 0.5 }
+  );
+
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("hangmanHistory");
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
+  }, []);
 
   useEffect(() => {
     fetchWord();
   }, [language]);
+
+  useEffect(() => {
+    if (timeLeft > 0 && !gameOver) {
+      timerRef.current = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+    } else if (timeLeft === 0) {
+      setGameOver(true);
+      const newHistory = [...history, { word, result: "Loss" }];
+      setHistory(newHistory);
+      localStorage.setItem("hangmanHistory", JSON.stringify(newHistory));
+      playLoss();
+    }
+    return () => clearTimeout(timerRef.current);
+  }, [timeLeft, gameOver]);
 
   async function fetchWord() {
     try {
@@ -187,16 +230,45 @@ export default function Hangman() {
       setGuessedLetters([]);
       setAttempts(6);
       setGameOver(false);
+      setHintUsed(false);
+      setTimeLeft(60);
+      stopWin();
+      stopLoss();
+      stopCorrect();
+      stopIncorrect();
     } catch (error) {
       console.error("Error fetching word:", error);
+    }
+  }
+
+  function checkGameStatus() {
+    if (gameOver) return;
+    if (
+      word &&
+      word.split("").every((letter) => guessedLetters.includes(letter))
+    ) {
+      const newHistory = [...history, { word, result: "Win" }];
+      setHistory(newHistory);
+      localStorage.setItem("hangmanHistory", JSON.stringify(newHistory));
+      setGameOver(true);
+      playWin();
+    } else if (attempts === 0) {
+      const newHistory = [...history, { word, result: "Loss" }];
+      setHistory(newHistory);
+      localStorage.setItem("hangmanHistory", JSON.stringify(newHistory));
+      setGameOver(true);
+      playLoss();
     }
   }
 
   function handleGuess(letter) {
     if (guessedLetters.includes(letter) || attempts === 0 || gameOver) return;
     setGuessedLetters([...guessedLetters, letter]);
-    if (!word.includes(letter)) {
+    if (word.includes(letter)) {
+      playCorrect();
+    } else {
       setAttempts(attempts - 1);
+      playIncorrect();
     }
   }
 
@@ -207,16 +279,10 @@ export default function Hangman() {
       .join(" ");
   }
 
-  function checkGameStatus() {
-    if (
-      word &&
-      word.split("").every((letter) => guessedLetters.includes(letter))
-    ) {
-      setHistory([...history, { word, result: "Win" }]);
-      setGameOver(true);
-    } else if (attempts === 0) {
-      setHistory([...history, { word, result: "Loss" }]);
-      setGameOver(true);
+  function handleHint() {
+    if (!hintUsed) {
+      setGuessedLetters([word[0], ...guessedLetters]);
+      setHintUsed(true);
     }
   }
 
@@ -225,115 +291,133 @@ export default function Hangman() {
   }, [guessedLetters, attempts]);
 
   return (
-    <div className="flex flex-col md:flex-row items-center md:items-start p-4 gap-8">
-      {/* Left: Hangman Drawing */}
-      <div className="w-full md:w-1/3 flex justify-center bg-white">
-        <HangmanDrawing attempts={attempts} />
-      </div>
-
-      {/* Middle: Game Controls */}
-      <div className="flex-1 flex flex-col items-center gap-4">
-        <h1 className="text-2xl font-bold text-center md:text-left">
-          {translations[language].title}
-        </h1>
-        <Card>
-          <CardContent>{renderWord()}</CardContent>
-        </Card>
-        <p className="text-lg">
-          {translations[language].attemptsLeft}: {attempts}
-        </p>
-
-        {/* Letters Grid */}
-        <div className="grid grid-cols-9 md:grid-cols-6 lg:grid-cols-9 gap-2">
-          {"abcdefghijklmnopqrstuvwxyz".split("").map((letter) => (
-            <Button
-              key={letter}
-              onClick={() => handleGuess(letter)}
-              disabled={guessedLetters.includes(letter) || gameOver}
-              className="bg-gray-300 text-black hover:bg-gray-400"
-            >
-              {letter}
-            </Button>
-          ))}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="flex flex-col md:flex-row items-center md:items-start p-4 gap-8">
+        {gameOver && history[history.length - 1].result === "Win" && (
+          <Confetti />
+        )}
+        {/* Left: Hangman Drawing */}
+        <div className="w-full md:w-1/3 flex justify-center bg-white">
+          <HangmanDrawing attempts={attempts} />
         </div>
 
-        {/* Language Selection */}
-        <div className="flex gap-2">
-          {Object.keys(languages).map((lang) => (
-            <Button
-              key={lang}
-              onClick={() => setLanguage(lang)}
-              className={`${
-                language === lang
-                  ? "bg-blue-700 text-white"
-                  : "bg-gray-200 text-black hover:bg-gray-300"
-              }`}
-            >
-              {lang.toUpperCase()}
-            </Button>
-          ))}
-        </div>
+        {/* Middle: Game Controls */}
+        <div className="flex-1 flex flex-col items-center gap-4">
+          <h1 className="text-2xl font-bold text-center md:text-left">
+            {translations[language].title}
+          </h1>
+          <Card>
+            <CardContent>{renderWord()}</CardContent>
+          </Card>
+          <p className="text-lg">
+            {translations[language].attemptsLeft}: {attempts}
+          </p>
+          {/* Countdown Timer */}
+          <p className="text-lg">Time left: {timeLeft} seconds</p>
 
-        {/* New Word Button */}
-        {/* <Button
-          onClick={() => {
-            fetchWord();
-            setHistory([]);
-          }}
-          className="mt-4 border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
-        >
-          New Word
-        </Button> */}
+          {/* Letters Grid */}
+          <div className="grid grid-cols-9 md:grid-cols-6 lg:grid-cols-9 gap-2">
+            {"abcdefghijklmnopqrstuvwxyz".split("").map((letter) => (
+              <Button
+                key={letter}
+                onClick={() => handleGuess(letter)}
+                disabled={guessedLetters.includes(letter) || gameOver}
+                className="bg-gray-300 text-black hover:bg-gray-400"
+                aria-label={`Guess letter ${letter}`}
+              >
+                {letter}
+              </Button>
+            ))}
+          </div>
 
-        {/* Restart & New Word Buttons */}
-        <div className="flex gap-4 mt-4">
+          {/* Hint Button */}
           <Button
-            onClick={() => {
-              setGuessedLetters([]);
-              setAttempts(6);
-              setGameOver(false);
-              fetchWord();
-            }}
-            className="border-2 border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+            onClick={handleHint}
+            disabled={hintUsed}
+            className="mt-4 border-2 border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
+            aria-label="Get a hint"
           >
-            {translations[language].restartGame}
+            {translations[language].hint}
           </Button>
 
-          <Button
+          {/* Language Selection */}
+          <div className="flex gap-2 mt-4">
+            {Object.keys(languages).map((lang) => (
+              <Button
+                key={lang}
+                onClick={() => setLanguage(lang)}
+                className={`${
+                  language === lang
+                    ? "bg-blue-700 text-white"
+                    : "bg-gray-200 text-black hover:bg-gray-300"
+                }`}
+                aria-label={`Change language to ${lang.toUpperCase()}`}
+              >
+                {lang.toUpperCase()}
+              </Button>
+            ))}
+          </div>
+
+          {/* Restart & New Word Buttons */}
+          <div className="flex gap-4 mt-4">
+            <Button
+              onClick={() => {
+                setGuessedLetters([]);
+                setAttempts(6);
+                setGameOver(false);
+                fetchWord();
+                setHistory([]);
+                localStorage.removeItem("hangmanHistory");
+              }}
+              className="border-2 border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+              aria-label="Restart game"
+            >
+              {translations[language].restartGame}
+            </Button>
+
+            <Button
+              onClick={() => {
+                fetchWord();
+              }}
+              className="border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+              aria-label="Get a new word"
+            >
+              {translations[language].newWord}
+            </Button>
+          </div>
+        </div>
+
+        {/* Right: Game History */}
+        <div className="w-full md:w-1/5 border-t md:border-t-0 md:border-l pl-4 pt-4 md:pt-0">
+          <h2 className="text-xl font-bold">
+            {translations[language].history}
+          </h2>
+          {/* <Button
             onClick={() => {
-              fetchWord();
               setHistory([]);
+              localStorage.removeItem("hangmanHistory");
             }}
-            className="border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white"
+            className="mb-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+            aria-label="Reset game history"
           >
-            {translations[language].newWord}
-          </Button>
+            {translations[language].resetHistory}
+          </Button> */}
+
+          <ul>
+            {history.map((game, index) => (
+              <li
+                key={index}
+                className={
+                  game.result === "Win" ? "text-green-600" : "text-red-600"
+                }
+              >
+                {game.word} -{" "}
+                {translations[language][game.result.toLowerCase()]}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
-
-      {/* Right: Game History */}
-      <div className="w-full md:w-1/5 border-t md:border-t-0 md:border-l pl-4 pt-4 md:pt-0">
-        <h2 className="text-xl font-bold">{translations[language].history}</h2>
-        <Button
-          onClick={() => setHistory([])}
-          className="mb-2 border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-        >
-          {translations[language].resetHistory}
-        </Button>
-
-        <ul>
-          {history.map((game, index) => (
-            <li
-              key={index}
-              className={
-                game.result === "Win" ? "text-green-600" : "text-red-600"
-              }
-            >
-              {game.word} - {translations[language][game.result.toLowerCase()]}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
+    </motion.div>
   );
 }
